@@ -1,34 +1,51 @@
 #!/bin/bash
 
-NAME=MeshCommander
+set -e
+
+NAME=meshcommander
 BASE=${0%/*}
-TMP=/tmp
-JS=${TMP}/appbuild.js
-BUILD=${BASE}/build
-APP=${BUILD}/${NAME}/osx64/${NAME}.app
+TMP="$(mktemp -d)"
+JS=${TMP}/appbuild.mjs
+PACKAGE_JSON=${TMP}/package.json
+BUILD=${BASE}/out
+APP=${BUILD}/${NAME}.app
 export CODESIGN_ALLOCATE="$(xcrun -find codesign_allocate)"
 #CHILD_ENT=${BASE}/entitlements-child.plist
 #PARENT_ENT=${BASE}/entitlements-parent.plist
 ID="$(security find-identity | awk '/ID Application/ {print $2}' | uniq)"
 
+mkdir -p ${TMP}
+
 ## Script to pass build parameters to nw-builder
+> ${JS}
 cat<<EOF>>${JS}
-var NwBuilder = import('nw-builder');
-var nw = new NwBuilder({
-    files: './source/**',
-    platforms: ['osx64'],
+import nwbuild from 'nw-builder';
+
+nwbuild({
+    srcDir: '${BASE}/source',
+	glob: false,
+    platforms: ['osx'],
     buildType: 'default',
     macIcns: './files/nw.icns',
     macPlist: './files/Info.plist'
-});
-
-// .build() returns a promise but also supports a plain callback approach as well
-nw.build().then(function () {
+}).then(function () {
    console.log('all done!');
 }).catch(function (error) {
     console.error(error);
 });
 EOF
+
+> ${PACKAGE_JSON}
+cat<<EOF>>${PACKAGE_JSON}
+{
+	"dependencies": {
+		"nw-builder": "4.10.0"
+	}
+}
+EOF
+
+## Install nw-builder
+npm --prefix ${TMP} install
 
 ## Build the application
 node ${JS}
